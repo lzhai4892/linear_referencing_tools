@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linear Referencing Toolset</title>
+  <meta name="theme-color" content="#1c1c1a" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="styles.css?v=log-time" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <h1>Linear Referencing Toolset</h1>
+        <span class="app-version" title="Application version">Version 1.0</span>
+      </div>
+    </div>
+    <div class="advanced-tools">
+      <p class="advanced-hint" id="advanced-hint">ROADWAY + mileposts only</p>
+      <div class="mode-switch" role="group" aria-label="Tool mode">
+        <button type="button" class="mode-btn is-active" data-advanced="0" aria-pressed="true">Standard</button>
+        <button type="button" class="mode-btn" data-advanced="1" aria-pressed="false">Advanced</button>
+      </div>
+      <input type="checkbox" id="advanced-toggle" hidden aria-hidden="true" tabindex="-1" />
+    </div>
+  </header>
+
+  <nav class="steps" aria-label="Workflow">
+    <button class="rail-item active" data-tab="validate" type="button"><span class="step">1</span> Validate</button>
+    <button class="rail-item" data-tab="overlay" type="button"><span class="step">2</span> Overlay</button>
+    <button class="rail-item" data-tab="dissolve" type="button"><span class="step">3</span> Dissolve</button>
+    <button class="rail-item" data-tab="locate" type="button"><span class="step">4</span> Locate</button>
+    <button class="rail-item" data-tab="display" type="button"><span class="step">5</span> Display</button>
+    <span class="steps-rule" aria-hidden="true"></span>
+    <button class="rail-item" data-tab="calibrate" type="button">Create LRS</button>
+    <button class="rail-item" data-tab="explode" type="button">Extract / combine</button>
+  </nav>
+
+  <div class="app">
+    <aside class="workbench">
+      <aside class="panel-info" id="panel-info" aria-live="polite">
+        <div class="id-bar" role="region" aria-label="Column layout">
+          <label class="id-bar-field id-bar-profile">
+            <span>Column layout</span>
+            <select id="field-profile" title="Apply common agency column names to this step if they exist in the file">
+              <option value="">Auto-detect from this file</option>
+              <option value="florida">Florida RCI — ROADWAY, BEGIN_POST, END_POST</option>
+              <option value="esri">Esri / many states — ROUTE_ID, FROM_MEASURE, TO_MEASURE</option>
+              <option value="gdot">Georgia — ROUTE_ID, FROM_MILEPOINT, TO_MILEPOINT</option>
+              <option value="ncdot">NCDOT — RouteID, FromMeasure, ToMeasure</option>
+              <option value="generic">Generic — RTE_ID / ROUTE, BEG_MP, END_MP</option>
+            </select>
+          </label>
+        </div>
+        <div class="panel-info-head">
+          <h3 id="panel-info-title">Validate event coverage</h3>
+          <button type="button" class="panel-info-toggle" id="panel-info-toggle" aria-expanded="false" aria-controls="panel-info-body">
+            About
+          </button>
+        </div>
+        <p class="panel-info-blurb" id="panel-info-blurb">Check inverted mileposts, null keys, overlaps, and gaps before you break tables.</p>
+        <div class="panel-info-body" id="panel-info-body" hidden></div>
+      </aside>
+      <main>
+        <section id="validate" class="panel active">
+          <label>Event table
+            <input type="file" id="va-input" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+          </label>
+          <div class="row triple">
+            <label>Route ID<select id="va-road"><option value="">Choose a file</option></select></label>
+            <label>Begin milepost<select id="va-bmp"><option value="">Choose a file</option></select></label>
+            <label>End milepost<select id="va-emp"><option value="">Choose a file</option></select></label>
+          </div>
+          <div class="advanced-only">
+            <p class="hint">Left vs right and different years are QC’d separately when you map those fields.</p>
+            <div class="row">
+              <label><span class="field-caption">Offset <span class="opt">optional</span></span><select id="va-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Side <span class="opt">optional</span></span><select id="va-side"><option value="">None</option></select></label>
+              <label><span class="field-caption">From date <span class="opt">optional</span></span><select id="va-from"><option value="">None</option></select></label>
+              <label><span class="field-caption">To date <span class="opt">optional</span></span><select id="va-to"><option value="">None</option></select></label>
+            </div>
+            <label><span class="field-caption">As-of date <span class="opt">optional</span></span><input id="va-asof" type="date" /></label>
+          </div>
+          <div class="row">
+            <label>QC filename<input id="va-output" value="lrs_qc_issues.csv" /></label>
+            <label>Table filename<input id="va-table-output" value="lrs_events.csv" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="validate">Run validate</button>
+            <button type="button" class="btn" data-export="va-issues" data-export-label="Export QC issues" disabled>Export QC issues</button>
+            <button type="button" class="btn" data-export="va-table" data-export-label="Export table" disabled>Export table</button>
+          </div>
+        </section>
+
+        <section id="overlay" class="panel">
+          <div class="file-block">
+            <label>Target events
+              <input type="file" id="ov-target" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+            </label>
+            <p class="session-hint" data-session-input="ov-target">No session yet. Run Validate first, or choose a target file here.</p>
+          </div>
+          <div class="row triple">
+            <label>Target route ID<select id="ov-t-road"><option value="">Auto</option></select></label>
+            <label>Target BMP<select id="ov-t-bmp"><option value="">Auto</option></select></label>
+            <label>Target EMP<select id="ov-t-emp"><option value="">Auto</option></select></label>
+          </div>
+          <div class="advanced-only">
+            <p class="hint">Target offset, side, and dates. Overlay only joins matching side and overlapping dates.</p>
+            <div class="row">
+              <label><span class="field-caption">Target offset <span class="opt">optional</span></span><select id="ov-t-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Target side <span class="opt">optional</span></span><select id="ov-t-side"><option value="">None</option></select></label>
+              <label><span class="field-caption">Target from date <span class="opt">optional</span></span><select id="ov-t-from"><option value="">None</option></select></label>
+              <label><span class="field-caption">Target to date <span class="opt">optional</span></span><select id="ov-t-to"><option value="">None</option></select></label>
+            </div>
+          </div>
+          <label>Overlay events
+            <input type="file" id="ov-overlay" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+          </label>
+          <div class="row triple">
+            <label>Overlay route ID<select id="ov-o-road"><option value="">Auto</option></select></label>
+            <label>Overlay BMP<select id="ov-o-bmp"><option value="">Auto</option></select></label>
+            <label>Overlay EMP<select id="ov-o-emp"><option value="">Auto</option></select></label>
+          </div>
+          <div class="advanced-only">
+            <div class="row">
+              <label><span class="field-caption">Overlay offset <span class="opt">optional</span></span><select id="ov-o-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Overlay side <span class="opt">optional</span></span><select id="ov-o-side"><option value="">None</option></select></label>
+              <label><span class="field-caption">Overlay from date <span class="opt">optional</span></span><select id="ov-o-from"><option value="">None</option></select></label>
+              <label><span class="field-caption">Overlay to date <span class="opt">optional</span></span><select id="ov-o-to"><option value="">None</option></select></label>
+            </div>
+            <label><span class="field-caption">As-of date <span class="opt">optional</span></span><input id="ov-asof" type="date" /></label>
+          </div>
+          <div class="row">
+            <div class="field">
+              <span class="field-caption">Unmatched target
+                <button type="button" class="help-btn" data-help="ov-how" aria-label="About unmatched target">?</button>
+              </span>
+              <select id="ov-how">
+                <option value="left">Keep target gaps</option>
+                <option value="inner">Matches only</option>
+              </select>
+            </div>
+            <div class="field">
+              <span class="field-caption">Collapse
+                <button type="button" class="help-btn" data-help="ov-collapse" aria-label="About collapse">?</button>
+              </span>
+              <select id="ov-collapse">
+                <option value="none">Keep every slice</option>
+                <option value="longest">Longest overlay attributes</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-caption">Group columns for longest collapse
+              <button type="button" class="help-btn" data-help="ov-groups" aria-label="About collapse groups">?</button>
+            </span>
+            <input id="ov-groups" placeholder="Leave blank to use remaining target columns" />
+          </div>
+          <div class="row">
+            <label>Format
+              <select id="ov-fmt">
+                <option value="csv">CSV (attributes)</option>
+                <option value="geojson">GeoJSON (attributes)</option>
+              </select>
+            </label>
+            <label>Export filename<input id="ov-output" value="overlay.csv" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="overlay">Run overlay</button>
+            <button type="button" class="btn" data-export="ov" data-export-label="Export overlay" disabled>Export overlay</button>
+          </div>
+        </section>
+
+        <section id="dissolve" class="panel">
+          <div class="file-block">
+            <label>Event table
+              <input type="file" id="ds-input" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+            </label>
+            <p class="session-hint" data-session-input="ds-input">No session yet. Run Overlay or Validate first, or choose a file here.</p>
+          </div>
+          <div class="row triple">
+            <label>Route ID<select id="ds-road"><option value="">Auto</option></select></label>
+            <label>BMP<select id="ds-bmp"><option value="">Auto</option></select></label>
+            <label>EMP<select id="ds-emp"><option value="">Auto</option></select></label>
+          </div>
+          <div class="field">
+            <span class="field-caption">Group columns
+              <button type="button" class="help-btn" data-help="ds-groups" aria-label="About group columns">?</button>
+            </span>
+            <input id="ds-groups" placeholder="Leave blank to keep every attribute" />
+          </div>
+          <div class="advanced-only">
+            <p class="hint">Mapped side and dates are added to the dissolve groups so left/right and years stay separate.</p>
+            <div class="row">
+              <label><span class="field-caption">Offset <span class="opt">optional</span></span><select id="ds-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Side <span class="opt">optional</span></span><select id="ds-side"><option value="">None</option></select></label>
+              <label><span class="field-caption">From date <span class="opt">optional</span></span><select id="ds-from"><option value="">None</option></select></label>
+              <label><span class="field-caption">To date <span class="opt">optional</span></span><select id="ds-to"><option value="">None</option></select></label>
+            </div>
+            <label><span class="field-caption">As-of date <span class="opt">optional</span></span><input id="ds-asof" type="date" /></label>
+          </div>
+          <div class="option-row">
+            <label class="check"><input type="checkbox" id="ds-contig" checked /> Require milepost adjacency</label>
+            <button type="button" class="help-btn" data-help="ds-contig" aria-label="About milepost adjacency">?</button>
+          </div>
+          <div class="row">
+            <label>Format
+              <select id="ds-fmt">
+                <option value="csv">CSV (attributes)</option>
+                <option value="geojson">GeoJSON (attributes)</option>
+              </select>
+            </label>
+            <label>Export filename<input id="ds-output" value="dissolved.csv" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="dissolve">Run dissolve</button>
+            <button type="button" class="btn" data-export="ds" data-export-label="Export dissolved" disabled>Export dissolved</button>
+          </div>
+        </section>
+
+        <section id="locate" class="panel">
+          <label>Points
+            <input type="file" id="lc-points" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+          </label>
+          <div class="row">
+            <label>Point route ID<select id="lc-p-road"><option value="">Auto</option></select></label>
+            <label>Point measure<select id="lc-p-meas"><option value="">Auto</option></select></label>
+          </div>
+          <div class="advanced-only">
+            <div class="row">
+              <label><span class="field-caption">Point offset <span class="opt">optional</span></span><select id="lc-p-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Point side <span class="opt">optional</span></span><select id="lc-p-side"><option value="">None</option></select></label>
+            </div>
+          </div>
+          <div class="file-block">
+            <label>Line events
+              <input type="file" id="lc-events" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+            </label>
+            <p class="session-hint" data-session-input="lc-events">No session yet. Run Overlay or Dissolve first, or choose line events here.</p>
+          </div>
+          <div class="row triple">
+            <label>Line route ID<select id="lc-e-road"><option value="">Auto</option></select></label>
+            <label>Line BMP<select id="lc-e-bmp"><option value="">Auto</option></select></label>
+            <label>Line EMP<select id="lc-e-emp"><option value="">Auto</option></select></label>
+          </div>
+          <div class="advanced-only">
+            <p class="hint">A point only locates on an event with the same side when both sides are mapped.</p>
+            <div class="row">
+              <label><span class="field-caption">Line offset <span class="opt">optional</span></span><select id="lc-e-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Line side <span class="opt">optional</span></span><select id="lc-e-side"><option value="">None</option></select></label>
+              <label><span class="field-caption">Line from date <span class="opt">optional</span></span><select id="lc-e-from"><option value="">None</option></select></label>
+              <label><span class="field-caption">Line to date <span class="opt">optional</span></span><select id="lc-e-to"><option value="">None</option></select></label>
+            </div>
+            <label><span class="field-caption">As-of date <span class="opt">optional</span></span><input id="lc-asof" type="date" /></label>
+          </div>
+          <div class="row">
+            <label>Located filename<input id="lc-output" value="located.csv" /></label>
+            <label>Unmatched filename<input id="lc-unmatched" value="unmatched.csv" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="locate">Run locate</button>
+            <button type="button" class="btn" data-export="lc" data-export-label="Export located" disabled>Export located</button>
+            <button type="button" class="btn" data-export="lc-unmatched" data-export-label="Export unmatched" disabled>Export unmatched</button>
+          </div>
+        </section>
+
+        <section id="display" class="panel">
+          <div class="file-block">
+            <label>Source LRS routes
+              <input type="file" id="dp-routes" accept=".geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+            </label>
+            <p class="session-hint" data-session-input="dp-routes">No calibrated routes yet. Choose a route layer, or run Create LRS first if the file has no IDs or measures.</p>
+          </div>
+          <div class="row triple">
+            <label>Route ID<select id="dp-seg"><option value="">Load routes first</option></select></label>
+            <label>Route BMP<select id="dp-bmp"><option value="">Load routes first</option></select></label>
+            <label>Route EMP<select id="dp-emp"><option value="">Load routes first</option></select></label>
+          </div>
+          <div class="file-block">
+            <label><span class="field-caption">Event table <span class="opt">optional</span></span>
+              <input type="file" id="dp-events" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+            </label>
+            <p class="session-hint" data-session-input="dp-events">No session yet. Run Overlay or Dissolve first, or choose events here. Routes-only is fine.</p>
+          </div>
+          <div class="row triple">
+            <label>Event route ID<select id="dp-ev-seg"><option value="">Same as routes / auto</option></select></label>
+            <label>Event BMP<select id="dp-ev-bmp"><option value="">Same as routes / auto</option></select></label>
+            <label>Event EMP<select id="dp-ev-emp"><option value="">Same as routes / auto</option></select></label>
+          </div>
+          <div class="advanced-only">
+            <p class="hint">Dates can slice the table before clip. Offset is kept on the attributes; it is not drawn off the centerline.</p>
+            <div class="row">
+              <label><span class="field-caption">Offset <span class="opt">optional</span></span><select id="dp-ev-offset"><option value="">None</option></select></label>
+              <label><span class="field-caption">Side <span class="opt">optional</span></span><select id="dp-ev-side"><option value="">None</option></select></label>
+              <label><span class="field-caption">From date <span class="opt">optional</span></span><select id="dp-ev-from"><option value="">None</option></select></label>
+              <label><span class="field-caption">To date <span class="opt">optional</span></span><select id="dp-ev-to"><option value="">None</option></select></label>
+            </div>
+            <label><span class="field-caption">As-of date <span class="opt">optional</span></span><input id="dp-asof" type="date" /></label>
+          </div>
+          <div class="row">
+            <label>Format
+              <select id="dp-fmt">
+                <option value="geojson">GeoJSON</option>
+                <option value="shp">Shapefile zip (needs line geometry)</option>
+              </select>
+            </label>
+            <label>Export filename<input id="dp-output" value="events.geojson" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="display">Run display</button>
+            <button type="button" class="btn" data-export="dp" data-export-label="Export geometry" disabled>Export geometry</button>
+          </div>
+        </section>
+
+        <section id="calibrate" class="panel">
+          <label>Route geometry
+            <input type="file" id="cl-routes" accept=".geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+          </label>
+          <div class="row triple">
+            <label><span class="field-caption">Existing Route ID <span class="opt">optional</span></span><select id="cl-seg"><option value="">Create LRS_UID if missing</option></select></label>
+            <label><span class="field-caption">Existing BMP <span class="opt">optional</span></span><select id="cl-bmp"><option value="">Create LRS_BMP if missing</option></select></label>
+            <label><span class="field-caption">Existing EMP <span class="opt">optional</span></span><select id="cl-emp"><option value="">Create LRS_EMP if missing</option></select></label>
+          </div>
+          <p class="hint">Keeps fields you map. Fills missing IDs, 0–length mileposts, and vertex M from drawn length. That is a temporary LRS, not a published milepost system.</p>
+          <div class="row">
+            <label>Format
+              <select id="cl-fmt">
+                <option value="geojson">GeoJSON</option>
+                <option value="shp">Shapefile zip</option>
+              </select>
+            </label>
+            <label>Export filename<input id="cl-output" value="created_lrs.geojson" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="calibrate">Create LRS</button>
+            <button type="button" class="btn" data-export="cl" data-export-label="Export LRS" disabled>Export LRS</button>
+          </div>
+        </section>
+
+        <section id="explode" class="panel">
+          <label>Intersection table
+            <input type="file" id="exn-input" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+          </label>
+          <p class="hint" id="exn-hint">Load a table to see whether it already has usable mileposts or a packed approach field.</p>
+          <div class="row triple">
+            <label>Packed routes<select id="exn-packed"><option value="">Choose a file</option></select></label>
+            <label>Parent / intersection ID<select id="exn-parent"><option value="">Row number</option></select></label>
+            <label><span class="field-caption">Road names <span class="opt">optional</span></span><select id="exn-names"><option value="">None</option></select></label>
+          </div>
+          <div class="row">
+            <label>Stub length (miles)<input id="exn-stub" type="number" step="0.001" value="0.02" /></label>
+            <label>Export filename<input id="exn-output" value="extracted_routes.csv" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="explode">Run extract</button>
+            <button type="button" class="btn" data-export="exn" data-export-label="Export extracted" disabled>Export extracted</button>
+          </div>
+
+          <header class="panel-head split">
+            <h2>Combine sub-ids</h2>
+          </header>
+          <div class="file-block">
+            <label>Extracted or displayed rows
+              <input type="file" id="cb-input" accept=".csv,.txt,.xlsx,.geojson,.json,.zip,.shp,.dbf,.prj,.shx" multiple />
+            </label>
+            <p class="session-hint" data-session-input="cb-input">No session yet. Run Extract or Display first, or choose extracted rows here.</p>
+          </div>
+          <div class="row">
+            <label>Format
+              <select id="cb-fmt">
+                <option value="geojson">GeoJSON</option>
+                <option value="csv">CSV</option>
+                <option value="shp">Shapefile zip (needs line geometry)</option>
+              </select>
+            </label>
+            <label>Export filename<input id="cb-output" value="combined_intersections.geojson" /></label>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-run="combine">Run combine</button>
+            <button type="button" class="btn" data-export="cb" data-export-label="Export combined" disabled>Export combined</button>
+          </div>
+        </section>
+      </main>
+    </aside>
+
+    <div
+      class="splitter"
+      id="splitter"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the form panel"
+      aria-valuemin="360"
+      aria-valuemax="800"
+      aria-valuenow="520"
+      tabindex="0"
+    ></div>
+
+    <aside class="status-pane" aria-live="polite">
+      <section class="session" id="session-wrap">
+        <h2>Session</h2>
+        <p id="session-meta">No result yet. Later steps can reuse the last table.</p>
+        <p class="hint" id="load-notice" hidden></p>
+        <button type="button" class="btn" id="session-qc" data-export="va-issues" data-export-label="Download QC" disabled>Download QC</button>
+      </section>
+      <section class="log-wrap">
+        <div class="log-head">
+          <h2>Run log</h2>
+          <button type="button" class="btn-text" id="log-clear" title="Clear run log">Clear</button>
+        </div>
+        <ol class="log" id="log"></ol>
+      </section>
+    </aside>
+
+    <div
+      class="splitter"
+      id="status-splitter"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the session panel"
+      aria-valuemin="220"
+      aria-valuemax="480"
+      aria-valuenow="320"
+      tabindex="0"
+    ></div>
+
+    <section class="map-pane">
+      <div class="map-stage">
+        <div id="map" role="application" aria-label="Route and event map"></div>
+        <div class="map-toolbar">
+          <p class="map-toolbar-title">Map</p>
+          <div class="map-toolbar-section">
+            <label>Basemap
+              <select id="map-basemap">
+                <option value="light">OpenMaps</option>
+                <option value="streets">Streets</option>
+                <option value="satellite">Satellite</option>
+              </select>
+            </label>
+            <label>Color events by
+              <select id="map-color-by">
+                <option value="">None (solid orange)</option>
+              </select>
+            </label>
+          </div>
+          <div class="map-toolbar-section map-legend-block">
+            <p class="map-legend-label">Layers</p>
+            <div class="map-layer-list">
+              <div class="map-layer" data-layer="routes" id="map-layer-routes">
+                <label class="map-layer-toggle">
+                  <span class="map-layer-swatch routes" id="map-swatch-routes" aria-hidden="true"></span>
+                  <input type="checkbox" id="map-toggle-routes" checked />
+                  <span class="map-layer-name">Routes</span>
+                </label>
+                <div class="map-layer-style">
+                  <label class="map-style-color">Color
+                    <input type="color" id="map-color-routes" value="#3d6b5a" />
+                  </label>
+                  <label class="map-style-size">Width
+                    <input type="range" id="map-width-routes" min="1" max="12" step="0.5" value="2" />
+                    <span id="map-width-routes-val">2</span>
+                  </label>
+                </div>
+              </div>
+              <div class="map-layer" data-layer="events" id="map-layer-events">
+                <label class="map-layer-toggle">
+                  <span class="map-layer-swatch events" id="map-swatch-events" aria-hidden="true"></span>
+                  <input type="checkbox" id="map-toggle-events" checked />
+                  <span class="map-layer-name" id="map-layer-events-name">Events</span>
+                </label>
+                <div class="map-layer-style">
+                  <label class="map-style-color">Color
+                    <input type="color" id="map-color-events" value="#c45c28" />
+                  </label>
+                  <label class="map-style-size" id="map-style-events-width">Width
+                    <input type="range" id="map-width-events" min="1" max="12" step="0.5" value="3" />
+                    <span id="map-width-events-val">3</span>
+                  </label>
+                  <label class="map-style-size" id="map-style-events-size" hidden>Size
+                    <input type="range" id="map-size-events" min="4" max="18" step="1" value="7" />
+                    <span id="map-size-events-val">7</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <p class="map-legend-label map-color-legend-label" id="map-color-legend-label" hidden>Color by field</p>
+            <div class="map-swatches" id="map-swatches" hidden></div>
+          </div>
+          <div class="map-toolbar-row">
+            <button type="button" class="btn map-fit-btn" id="map-fit" title="Zoom the map to loaded routes and events">Zoom to data</button>
+            <p class="map-status" id="map-status">No geometry yet</p>
+          </div>
+          <p class="map-toolbar-hint">Click a line or point to identify and style · Review row click zooms here</p>
+        </div>
+        <p class="map-empty" id="map-empty">Load a line shapefile or GeoJSON to draw it here. The map fits your data, anywhere in the world.</p>
+      </div>
+      <section class="preview" id="preview-wrap" hidden>
+        <div
+          class="preview-splitter"
+          id="preview-splitter"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize the review table"
+          aria-valuemin="140"
+          aria-valuemax="50"
+          aria-valuenow="220"
+          tabindex="0"
+        ></div>
+        <h2>Review</h2>
+        <p id="preview-meta"></p>
+        <div class="table-wrap">
+          <table id="preview"></table>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <template id="route-pad-template">
+    <div class="route-pad">
+      <div class="route-pad-row">
+        <div class="field">
+          <span class="field-caption">Route ID pad
+            <button type="button" class="help-btn" data-help="roadway-pad" aria-label="About Route ID pad">?</button>
+          </span>
+          <select class="route-pad-mode" title="How to match and rewrite Route IDs">
+            <option value="numeric">Numeric IDs only</option>
+            <option value="off">Off — keep as written</option>
+            <option value="all">All IDs</option>
+          </select>
+        </div>
+        <label class="route-pad-width">
+          <span>Width</span>
+          <input class="route-pad-width-input" type="number" min="0" max="32" value="8" title="Pad width for numeric or all IDs" />
+        </label>
+      </div>
+      <p class="route-pad-hint">Numeric IDs pad to 8 characters (100 → 00000100). Text IDs such as I-95 stay unchanged.</p>
+      <p class="route-pad-warn">Padding rewrites Route IDs in this run (for example 100 → 00000100). Export to save the modified table.</p>
+    </div>
+  </template>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="js/table.js?v=lrs-logic"></script>
+  <script src="js/schema.js?v=route-pad"></script>
+  <script src="js/explode.js?v=lrs-logic"></script>
+  <script src="js/dissolve.js?v=lrs-logic"></script>
+  <script src="js/overlay.js?v=lrs-logic"></script>
+  <script src="js/locate.js?v=map-style"></script>
+  <script src="js/topology.js?v=route-id"></script>
+  <script src="js/geometry.js?v=map-style"></script>
+  <script src="js/io.js?v=lrs-logic"></script>
+  <script src="js/report.js?v=route-id"></script>
+  <script src="js/project.js?v=map-style"></script>
+  <script src="js/guide.js?v=info-combine"></script>
+  <script src="js/mapview.js?v=map-style"></script>
+  <script src="js/app.js?v=log-time"></script>
+</body>
+</html>

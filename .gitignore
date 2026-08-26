@@ -1,0 +1,9 @@
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+output/
+Roadway_Line_Overlay_App/uploads/

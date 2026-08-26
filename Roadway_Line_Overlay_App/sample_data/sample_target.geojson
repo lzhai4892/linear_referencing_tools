@@ -1,0 +1,80 @@
+{
+  "type": "FeatureCollection",
+  "name": "Sample_Target_Bottlenecks",
+  "crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "Segment_ID": "BN-101",
+        "Roadway": "I-4 Westbound",
+        "Head_Location": "I-4 W @ SR-434 / EXIT 94",
+        "Total_Delay_Min": 3450000.0,
+        "AADT": 142000
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-81.4245, 28.6750],
+          [-81.4350, 28.6680],
+          [-81.4480, 28.6590],
+          [-81.4620, 28.6490]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Segment_ID": "BN-102",
+        "Roadway": "I-4 Eastbound",
+        "Head_Location": "I-4 E @ SR-436 / ALTAMONTE",
+        "Total_Delay_Min": 2890000.0,
+        "AADT": 138000
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-81.4400, 28.6500],
+          [-81.4260, 28.6600],
+          [-81.4120, 28.6700]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Segment_ID": "BN-103",
+        "Roadway": "SR-50 (Colonial Dr)",
+        "Head_Location": "SR-50 @ Alafaya Trail",
+        "Total_Delay_Min": 1750000.0,
+        "AADT": 58000
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-81.2200, 28.5520],
+          [-81.2000, 28.5522],
+          [-81.1800, 28.5524]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Segment_ID": "BN-104",
+        "Roadway": "Cross-Street Crossing Line",
+        "Head_Location": "Maitland Blvd (Perpendicular Crossing I-4)",
+        "Total_Delay_Min": 850000.0,
+        "AADT": 42000
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-81.4450, 28.6250],
+          [-81.4400, 28.6450],
+          [-81.4350, 28.6650]
+        ]
+      }
+    }
+  ]
+}

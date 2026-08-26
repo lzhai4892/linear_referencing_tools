@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Internal LRS Toolkit</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Internal LRS Toolkit</h1>
+      <p class="lede">Local-only tool for joining, breaking, and merging linear-referencing event tables. Nothing is published to the web.</p>
+    </div>
+    <span class="badge">127.0.0.1</span>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="overlay">Join / break</button>
+    <button class="tab" data-tab="dissolve">Merge connected</button>
+    <button class="tab" data-tab="locate">Locate points</button>
+    <button class="tab" data-tab="clip">Clip to routes</button>
+    <button class="tab" data-tab="export">Export geometry</button>
+  </nav>
+
+  <main>
+    <section id="overlay" class="panel active">
+      <h2>Join two line files and break at mileposts</h2>
+      <p>Overlays a target event table onto another using roadway ID + BMP/EMP. Gaps stay on the target when join is left.</p>
+      <label>Target events<input id="ov-target" placeholder="C:\data\target.csv" /><button type="button" data-browse="ov-target">Browse</button></label>
+      <label>Overlay events<input id="ov-overlay" placeholder="C:\data\overlay.csv" /><button type="button" data-browse="ov-overlay">Browse</button></label>
+      <label>Output<input id="ov-output" placeholder="C:\data\joined.csv" /><button type="button" data-browse="ov-output" data-kind="save">Browse</button></label>
+      <div class="row">
+        <label>Join<select id="ov-how"><option value="left">left (keep target gaps)</option><option value="inner">inner (matches only)</option></select></label>
+        <label>Collapse<select id="ov-collapse"><option value="none">none</option><option value="longest">longest slice attributes</option></select></label>
+      </div>
+      <label>Group columns for longest collapse (comma-separated)<input id="ov-groups" placeholder="ROADWAY, SECTADT" /></label>
+      <button type="button" class="run" data-run="overlay">Run overlay</button>
+    </section>
+
+    <section id="dissolve" class="panel">
+      <h2>Merge lines when mileposts connect</h2>
+      <p>Dissolves adjacent segments that share attributes. Default requires current BMP to match previous EMP within 0.0001 mile.</p>
+      <label>Input<input id="ds-input" placeholder="C:\data\events.csv" /><button type="button" data-browse="ds-input">Browse</button></label>
+      <label>Output<input id="ds-output" placeholder="C:\data\dissolved.csv" /><button type="button" data-browse="ds-output" data-kind="save">Browse</button></label>
+      <label>Group columns (comma-separated)<input id="ds-groups" placeholder="ROADWAY, SECTADT" /></label>
+      <label class="check"><input type="checkbox" id="ds-contig" checked /> Require milepost adjacency</label>
+      <button type="button" class="run" data-run="dissolve">Run dissolve</button>
+    </section>
+
+    <section id="locate" class="panel">
+      <h2>Locate points on line events</h2>
+      <p>Keeps point rows whose LOCATION falls between a matching roadway’s BMP and EMP.</p>
+      <label>Points<input id="lc-points" placeholder="C:\data\points.csv" /><button type="button" data-browse="lc-points">Browse</button></label>
+      <label>Line events<input id="lc-events" placeholder="C:\data\events.csv" /><button type="button" data-browse="lc-events">Browse</button></label>
+      <label>Output (located)<input id="lc-output" placeholder="C:\data\located.csv" /><button type="button" data-browse="lc-output" data-kind="save">Browse</button></label>
+      <label>Unmatched output (optional)<input id="lc-unmatched" placeholder="C:\data\unmatched.csv" /><button type="button" data-browse="lc-unmatched" data-kind="save">Browse</button></label>
+      <button type="button" class="run" data-run="locate">Run locate</button>
+    </section>
+
+    <section id="clip" class="panel">
+      <h2>Clip event mileposts onto a route layer</h2>
+      <p>Cuts route geometries to each event BMP–EMP. Write <code>.gpkg</code> or <code>.shp</code> so geometry is saved.</p>
+      <label>Events<input id="cl-events" placeholder="C:\data\events.csv" /><button type="button" data-browse="cl-events">Browse</button></label>
+      <label>Routes shapefile / GPKG<input id="cl-routes" placeholder="C:\data\routes.shp" /><button type="button" data-browse="cl-routes">Browse</button></label>
+      <label>Output<input id="cl-output" placeholder="C:\data\events.gpkg" /><button type="button" data-browse="cl-output" data-kind="save">Browse</button></label>
+      <button type="button" class="run" data-run="clip">Run clip</button>
+    </section>
+
+    <section id="export" class="panel">
+      <h2>Export geometry as Shapefile or GeoJSON</h2>
+      <p>Provide a source line layer that already has linear referencing. Pick the segment ID, begin milepost, and end milepost fields. Optionally clip an event table onto that layer, then write <code>.shp</code> or <code>.geojson</code>.</p>
+      <label>Source LRS geometry<input id="ex-routes" placeholder="C:\data\routes.shp" /><button type="button" data-browse="ex-routes" data-load="ex-routes">Browse</button></label>
+      <div class="actions">
+        <button type="button" data-load-fields="ex-routes">Load source fields</button>
+      </div>
+      <div class="row triple">
+        <label>Segment ID<select id="ex-seg"><option value="">Load fields first</option></select></label>
+        <label>Start post (BMP)<select id="ex-bmp"><option value="">Load fields first</option></select></label>
+        <label>End post (EMP)<select id="ex-emp"><option value="">Load fields first</option></select></label>
+      </div>
+      <label>Event table (optional — clip these segments onto the source geometry)<input id="ex-events" placeholder="C:\data\events.csv" /><button type="button" data-browse="ex-events" data-load="ex-events">Browse</button></label>
+      <div class="actions">
+        <button type="button" data-load-fields="ex-events">Load event fields</button>
+      </div>
+      <div class="row triple">
+        <label>Event segment ID<select id="ex-ev-seg"><option value="">Same as source / auto</option></select></label>
+        <label>Event start post<select id="ex-ev-bmp"><option value="">Same as source / auto</option></select></label>
+        <label>Event end post<select id="ex-ev-emp"><option value="">Same as source / auto</option></select></label>
+      </div>
+      <div class="row">
+        <label>Format<select id="ex-fmt"><option value="geojson">GeoJSON (.geojson)</option><option value="shp">Shapefile (.shp)</option></select></label>
+        <label>Output<input id="ex-output" placeholder="C:\data\lrs_export.geojson" /><button type="button" data-browse="ex-output" data-kind="save">Browse</button></label>
+      </div>
+      <button type="button" class="run" data-run="export">Export geometry</button>
+    </section>
+
+    <section class="status" id="status" hidden></section>
+    <section class="preview" id="preview-wrap" hidden>
+      <h2>Preview</h2>
+      <p id="preview-meta"></p>
+      <div class="table-wrap">
+        <table id="preview"></table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
