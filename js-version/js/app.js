@@ -8,7 +8,7 @@
   const extractHint = document.getElementById("exn-hint");
   const panelInfo = document.getElementById("panel-info");
   const cache = {};
-  const session = { last: null, extracted: null, display: null, calibrated: null, crs: null };
+  const session = { last: null, extracted: null, display: null, calibrated: null, crs: null, prj: null };
   const exports = {};
 
   const TABLE_EXT = [".csv", ".txt", ".xlsx", ".geojson", ".json", ".zip", ".shp", ".dbf", ".prj", ".shx"];
@@ -35,34 +35,66 @@
     }
   }
 
+  let logRun = null;
+
+  function formatLogTime(when) {
+    return when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  }
+
+  function scrollLog() {
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function finishLogRun() {
+    if (!logRun) return;
+    const when = new Date();
+    const end = document.createElement("div");
+    end.className = "log-run-end";
+    const time = document.createElement("time");
+    time.dateTime = when.toISOString();
+    time.textContent = formatLogTime(when);
+    end.append(time);
+    logRun.item.appendChild(end);
+    logRun = null;
+    scrollLog();
+  }
+
+  function startLogRun(title) {
+    finishLogRun();
+    const item = document.createElement("li");
+    item.className = "log-run";
+    const head = document.createElement("div");
+    head.className = "log-run-head";
+    head.textContent = title;
+    const steps = document.createElement("ul");
+    steps.className = "log-run-steps";
+    item.append(head, steps);
+    logEl.appendChild(item);
+    logRun = { item, steps };
+    scrollLog();
+  }
+
   function clearLog() {
+    logRun = null;
     logEl.innerHTML = "";
   }
 
   const logClear = document.getElementById("log-clear");
   if (logClear) logClear.addEventListener("click", () => clearLog());
 
-  function formatLogTime(when) {
-    return when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
-  }
-
   function addLog(entry) {
     const item = document.createElement("li");
     item.className = entry.level || "info";
-    const when = new Date();
-    const time = document.createElement("time");
-    time.className = "log-time";
-    time.dateTime = when.toISOString();
-    time.textContent = formatLogTime(when);
-    item.append(time, " ", entry.text);
+    item.append(entry.text);
     if (entry.sample) {
       const sample = document.createElement("span");
       sample.className = "sample";
       sample.textContent = entry.sample;
       item.appendChild(sample);
     }
-    logEl.appendChild(item);
-    logEl.scrollTop = logEl.scrollHeight;
+    if (logRun) logRun.steps.appendChild(item);
+    else logEl.appendChild(item);
+    scrollLog();
   }
 
   function writeLogs(lines) {
@@ -221,28 +253,117 @@
     return `${stem}.geojson`;
   }
 
+  function inputStem(fileName) {
+    const base = String(fileName || "").replace(/^.*[\\/]/, "");
+    return base.replace(/\.(csv|txt|xlsx|xls|geojson|json|zip|shp|gpkg)$/i, "") || "lrs";
+  }
+
+  function chosenFileName(input) {
+    const files = [...((input && input.files) || [])];
+    const preferred = files.find((file) => /\.(csv|txt|xlsx|xls|geojson|json|zip|shp)$/i.test(file.name));
+    return (preferred || files[0] || {}).name || "";
+  }
+
+  function formatValue(fmtId, fallback) {
+    const el = document.getElementById(fmtId);
+    return (el && el.value) || fallback;
+  }
+
+  function setExportName(outputId, stem, suffix, fmt) {
+    const el = document.getElementById(outputId);
+    if (!el) return;
+    el.value = filenameFor(`${stem}${suffix}`, fmt);
+  }
+
+  function suggestExportsFromInput(inputId, fileName) {
+    const stem = inputStem(fileName);
+    if (!stem) return;
+    if (inputId === "va-input") {
+      setExportName("va-output", stem, "_qc", "csv");
+      setExportName("va-table-output", stem, "_events", "csv");
+      return;
+    }
+    if (inputId === "ov-target") {
+      setExportName("ov-output", stem, "_overlay", formatValue("ov-fmt", "csv"));
+      return;
+    }
+    if (inputId === "ov-overlay") {
+      const target = document.getElementById("ov-target");
+      if (target && target.files && target.files.length) return;
+      setExportName("ov-output", stem, "_overlay", formatValue("ov-fmt", "csv"));
+      return;
+    }
+    if (inputId === "ds-input") {
+      setExportName("ds-output", stem, "_dissolved", formatValue("ds-fmt", "csv"));
+      return;
+    }
+    if (inputId === "lc-points") {
+      setExportName("lc-output", stem, "_located", "csv");
+      setExportName("lc-unmatched", stem, "_unmatched", "csv");
+      return;
+    }
+    if (inputId === "dp-events") {
+      setExportName("dp-output", stem, "_display", formatValue("dp-fmt", "geojson"));
+      return;
+    }
+    if (inputId === "dp-routes") {
+      const events = document.getElementById("dp-events");
+      if (events && events.files && events.files.length) return;
+      setExportName("dp-output", stem, "_display", formatValue("dp-fmt", "geojson"));
+      return;
+    }
+    if (inputId === "cl-routes") {
+      setExportName("cl-output", stem, "_lrs", formatValue("cl-fmt", "geojson"));
+      return;
+    }
+    if (inputId === "exn-input") {
+      setExportName("exn-output", stem, "_extracted", "csv");
+      return;
+    }
+    if (inputId === "cb-input") {
+      setExportName("cb-output", stem, "_combined", formatValue("cb-fmt", "geojson"));
+    }
+  }
+
   function writeOutput(rows, filename, options = {}) {
     const fmt = options.fmt || (extOf(filename) === ".zip" || extOf(filename) === ".shp" ? "shp" : extOf(filename) === ".geojson" || extOf(filename) === ".json" ? "geojson" : "csv");
     const name = filenameFor(filename, fmt);
+    const wantWgs = fmt === "geojson" || (fmt === "shp" && options.crsMode !== "source");
+    let outRows = rows;
+    let prj = session.prj;
+    let crs = session.crs;
+    let crsNote = "";
+    if (fmt === "shp" || fmt === "geojson") {
+      if (wantWgs) {
+        const converted = LRS.rowsToWgs84(rows, { prj: session.prj, crs: session.crs });
+        outRows = converted.rows;
+        prj = converted.prj;
+        crs = converted.crs;
+        crsNote = converted.converted ? `WGS 84 from ${converted.from}` : "WGS 84";
+      } else {
+        const def = LRS.parseProjection(session.prj, session.crs, rows);
+        crsNote = def.label || session.crs || "source CRS";
+      }
+    }
     if (fmt === "shp") {
-      if (!LRS.rowsHaveLineGeometry(rows)) {
+      if (!LRS.rowsHaveLineGeometry(outRows)) {
         throw new Error(
           "Shapefile needs line geometry. Export CSV or GeoJSON, or run Display on a route layer first."
         );
       }
-      downloadBytes(name, LRS.shapefileZip(rows, name), "application/zip");
-      return name;
+      downloadBytes(name, LRS.shapefileZip(outRows, name, { prj, crs }), "application/zip");
+      return { name, crsNote };
     }
     if (fmt === "geojson") {
-      const geom = LRS.countLineGeometry(rows);
+      const geom = LRS.countLineGeometry(outRows);
       if (!geom) {
         addLog({ level: "warn", text: "GeoJSON has no line geometry. Run Display if you need shapes on the map." });
       }
-      downloadText(name, JSON.stringify(LRS.toGeoJson(rows), null, 2), "application/geo+json");
-      return name;
+      downloadText(name, JSON.stringify(LRS.toGeoJson(outRows, "EPSG:4326"), null, 2), "application/geo+json");
+      return { name, crsNote: crsNote || "WGS 84" };
     }
     downloadText(name, LRS.toCsv(rows), "text/csv");
-    return name;
+    return { name, crsNote: "" };
   }
 
   async function readInput(inputId, allowed, label) {
@@ -271,10 +392,19 @@
     throw new Error(`Choose a ${label}, or run a prior step to fill the session.`);
   }
 
+  function rememberSourceCrs(crsOrWkt, rows, options = {}) {
+    const text = typeof crsOrWkt === "string" ? crsOrWkt.trim() : "";
+    if (LRS.isPrjWkt(text)) session.prj = text;
+    else if (options.replacePrj) session.prj = null;
+    const code = LRS.detectCrs(text, rows);
+    if (code) session.crs = code;
+    return code;
+  }
+
   function rememberCalibratedRoutes(table, roadway, bmp, emp) {
     cache["dp-routes"] = table;
     session.calibrated = table;
-    session.crs = LRS.detectCrs(table.crs, table.rows);
+    rememberSourceCrs(table.crs, table.rows);
     const columns = LRS.columnsOf(table.rows);
     fillSelect("dp-seg", columns, roadway);
     fillSelect("dp-bmp", columns, bmp);
@@ -543,13 +673,7 @@
   }
 
   function beginRun(label) {
-    if (logEl.children.length) {
-      const sep = document.createElement("li");
-      sep.className = "log-sep";
-      sep.textContent = "—";
-      logEl.appendChild(sep);
-    }
-    addLog({ level: "info", text: `Running ${label}…` });
+    startLogRun(label);
   }
 
   async function loadFields(inputId) {
@@ -610,13 +734,19 @@
         fillSelect("cl-bmp", columns, schema.bmp, "Create LRS_BMP if missing");
         fillSelect("cl-emp", columns, schema.emp, "Create LRS_EMP if missing");
       }
-      const crs = LRS.detectCrs(table.crs, table.rows);
-      session.crs = crs;
-      showRoutes(table.rows, crs);
+      const crs = rememberSourceCrs(table.crs, table.rows, { replacePrj: true });
+      const def = LRS.parseProjection(session.prj, crs, table.rows);
+      showRoutes(table.rows, table.crs);
       addLog({
         level: "ok",
-        text: `Drew ${LRS.countLineGeometry(table.rows)} route line(s)${crs && crs !== "EPSG:4326" ? ` (${crs} → WGS84)` : ""}.`,
+        text: `Drew ${LRS.countLineGeometry(table.rows)} route line(s)${def.kind !== "geographic" && def.convertible ? ` (${def.label} → WGS 84)` : ""}.`,
       });
+      if (def.kind !== "geographic" && !def.convertible) {
+        addLog({
+          level: "warn",
+          text: `Map cannot convert ${def.label || "this projection"} to WGS 84. Keep the source .prj and export as Source CRS for ArcGIS.`,
+        });
+      }
     }
     if (inputId === "dp-events") {
       fillSelect("dp-ev-seg", columns, schema.roadway, "Same as routes / auto");
@@ -668,17 +798,18 @@
     return session.last && session.last.rows ? session.last.rows : null;
   }
 
-  function normalizeCrs(crs, rows) {
-    if (crs && /^EPSG:/i.test(crs)) return crs;
-    if (session.crs && /^EPSG:/i.test(session.crs)) return session.crs;
-    return LRS.detectCrs(crs || (cache["dp-routes"] && cache["dp-routes"].crs), rows);
+  function sourcePrj(crs) {
+    if (LRS.isPrjWkt(session.prj)) return session.prj;
+    if (LRS.isPrjWkt(crs)) return crs;
+    return session.prj || crs || null;
   }
 
   function showRoutes(rows, crs) {
     if (!window.LRSMap) return;
-    const code = normalizeCrs(crs, rows);
-    session.crs = code;
-    LRSMap.setRoutes(rows, { crs: code });
+    const prj = sourcePrj(crs);
+    const def = LRS.parseProjection(prj, crs, rows);
+    session.crs = def.code;
+    LRSMap.setRoutes(rows, { crs: def.code, prj });
   }
 
   function fillMapColorBy(rows) {
@@ -694,7 +825,8 @@
     const canDraw = LRS.rowsHaveMapGeometry ? LRS.rowsHaveMapGeometry(rows) : LRS.rowsHaveLineGeometry(rows);
     if (!window.LRSMap || !canDraw) return;
     fillMapColorBy(rows);
-    LRSMap.setEvents(rows, { crs: normalizeCrs(crs, rows) });
+    const prj = sourcePrj(crs);
+    LRSMap.setEvents(rows, { crs: LRS.parseProjection(prj, crs, rows).code, prj });
   }
 
   function drawLoadedTable(table, role) {
@@ -1078,7 +1210,9 @@
     const tabId = tab && tab.dataset.tab;
     const targets = PROFILE_TARGETS[tabId] || [];
     if (!profile) {
-      addLog({ level: "info", text: "Column layout is Auto-detect from this file. Change a dropdown if the guess is wrong." });
+      startLogRun("Column layout");
+      addLog({ level: "info", text: "Auto-detect from this file. Change a dropdown if the guess is wrong." });
+      finishLogRun();
       return;
     }
     let applied = 0;
@@ -1104,8 +1238,10 @@
       assign(empId, profile.emp);
       assign(measId, profile.measure);
     }
+    startLogRun("Column layout");
     if (!seen) {
       addLog({ level: "warn", text: `Load a table on ${tabId || "this step"} first, then apply ${profile.label}.` });
+      finishLogRun();
       return;
     }
     addLog({
@@ -1114,6 +1250,7 @@
         ? `Applied ${profile.label} column names where they exist. Review the dropdowns.`
         : `${profile.label} names were not found in this file. Pick columns from the dropdowns.`,
     });
+    finishLogRun();
   }
 
   insertRoutePadBlocks();
@@ -1150,10 +1287,8 @@
         fillAdvancedFromRows("dp-ev", lastRows());
         revealAdvancedFields();
       }
-      addLog({
-        level: "info",
-        text: on ? "Advanced mode on." : "Standard mode on.",
-      });
+      startLogRun(on ? "Advanced mode" : "Standard mode");
+      finishLogRun();
     });
   });
 
@@ -1163,10 +1298,12 @@
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("change", async () => {
+      const name = chosenFileName(el) || id;
+      startLogRun(`Load ${name}`);
       try {
+        suggestExportsFromInput(id, name);
         const loaded = await loadFields(id);
-        const name = el.files[0] ? el.files[0].name : id;
-        addLog({ level: "info", text: `Loaded ${loaded.rows} row(s) from ${name}.` });
+        addLog({ level: "info", text: `${loaded.rows.toLocaleString()} row(s).` });
         if (loaded.inspect) {
           writeLogs(LRS.reportEventKeys(loaded.inspect, loaded.rows).lines);
           setLoadNotice(loaded.inspect, loaded.rows);
@@ -1179,23 +1316,35 @@
           if (drawn) {
             addLog({
               level: "ok",
-              text: `Drew ${drawn} feature(s) on the map from ${name}.`,
+              text: `Drew ${drawn} feature(s) on the map.`,
             });
           } else if (/\.(zip|shp|geojson|json)$/i.test(name)) {
             addLog({
               level: "warn",
-              text: `${name} loaded as a table, but no line or point geometry was found to draw.`,
+              text: "Loaded as a table, but no line or point geometry was found to draw.",
             });
           }
         }
       } catch (err) {
         addLog({ level: "err", text: err.message });
+      } finally {
+        finishLogRun();
       }
     });
   });
 
   const cbInput = document.getElementById("cb-input");
-  if (cbInput) cbInput.addEventListener("change", () => updateSessionBanner());
+  if (cbInput) {
+    cbInput.addEventListener("change", () => {
+      const name = chosenFileName(cbInput);
+      if (name) {
+        startLogRun(`Load ${name}`);
+        suggestExportsFromInput("cb-input", name);
+        finishLogRun();
+      }
+      updateSessionBanner();
+    });
+  }
 
   function bindFormat(fmtId, outputId) {
     const fmt = document.getElementById(fmtId);
@@ -1208,17 +1357,45 @@
   bindFormat("ov-fmt", "ov-output");
   bindFormat("ds-fmt", "ds-output");
   bindFormat("dp-fmt", "dp-output");
+  bindFormat("cl-fmt", "cl-output");
   bindFormat("cb-fmt", "cb-output");
+
+  function bindExportCrs(fmtId, crsId) {
+    const fmt = document.getElementById(fmtId);
+    const crs = document.getElementById(crsId);
+    if (!fmt || !crs) return;
+    const sync = () => {
+      const shapefile = fmt.value === "shp";
+      crs.disabled = !shapefile;
+      if (!shapefile) crs.value = "4326";
+    };
+    fmt.addEventListener("change", sync);
+    sync();
+  }
+  bindExportCrs("dp-fmt", "dp-crs");
+  bindExportCrs("cl-fmt", "cl-crs");
+  bindExportCrs("cb-fmt", "cb-crs");
 
   document.querySelectorAll("[data-export]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const pack = exports[btn.dataset.export];
       if (!pack) return;
+      startLogRun(btn.dataset.exportLabel || btn.textContent.trim() || "Export");
       try {
-        const name = writeOutput(pack.rows, pack.filename, { fmt: pack.fmt });
-        addLog({ level: "ok", text: `Exported ${name}.` });
+        const panel = btn.closest(".panel");
+        const crsSel = panel && panel.querySelector("[data-export-crs]");
+        const exported = writeOutput(pack.rows, pack.filename, {
+          fmt: pack.fmt,
+          crsMode: crsSel ? crsSel.value : "4326",
+        });
+        addLog({
+          level: "ok",
+          text: exported.crsNote ? `${exported.name} (${exported.crsNote})` : exported.name,
+        });
       } catch (err) {
         addLog({ level: "err", text: err.message });
+      } finally {
+        finishLogRun();
       }
     });
   });
@@ -1403,6 +1580,7 @@
       if (!LRS.rowsHaveLineGeometry(routes.rows)) {
         throw new Error("Routes must include line geometry.");
       }
+      rememberSourceCrs(routes.crs, routes.rows);
       const routeSchema = lineSchemaFromSelects("dp-seg", "dp-bmp", "dp-emp", routes.rows);
       const routeRows = applyMappedRoutePad(routes.rows, routeSchema.roadway);
       showRoutes(routeRows, routes.crs);
@@ -1485,13 +1663,9 @@
       const runId = button.dataset.run;
       const checks = preflight(runId);
       if (checks.length) {
-        if (logEl.children.length) {
-          const sep = document.createElement("li");
-          sep.className = "log-sep";
-          sep.textContent = "—";
-          logEl.appendChild(sep);
-        }
+        startLogRun(button.textContent.trim());
         checks.forEach((msg) => addLog({ level: "err", text: msg }));
+        finishLogRun();
         return;
       }
       const actionRow = button.closest(".actions");
@@ -1509,6 +1683,7 @@
       } catch (err) {
         addLog({ level: "err", text: err.message || String(err) });
       } finally {
+        finishLogRun();
         siblings.forEach((btn) => {
           if (btn.dataset.export) {
             btn.disabled = !exports[btn.dataset.export];

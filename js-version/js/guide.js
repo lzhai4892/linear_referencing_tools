@@ -20,9 +20,9 @@
 
         "va-emp": "End milepost (END_POST, EMP, END_MP, …).",
 
-        "va-output": "Filename for Export QC issues — nothing downloads until you click it.",
+        "va-output": "QC export name. Updates from the input file (roads.xlsx → roads_qc.csv).",
 
-        "va-table-output": "Filename for Export table. Use this after Route ID pad rewrites IDs.",
+        "va-table-output": "Validated table name. Updates from the input file (roads.xlsx → roads_events.csv).",
 
         "va-groups": "Optional: offset, side, and dates split QC groups when Advanced tools is on.",
 
@@ -60,7 +60,7 @@
 
         "ov-groups": "Columns that must stay together when collapse is Longest. Leave blank to use remaining target columns.",
 
-        "ov-output": "Export filename — run stores results in session; export when ready.",
+        "ov-output": "Export name. Updates from the target file (roads.xlsx → roads_overlay.csv).",
 
       },
 
@@ -92,7 +92,7 @@
 
         "ds-contig": "Only merge when current BMP equals previous EMP (within tolerance).",
 
-        "ds-output": "Export filename for dissolved rows.",
+        "ds-output": "Export name. Updates from the input file (roads.xlsx → roads_dissolved.csv).",
 
       },
 
@@ -120,7 +120,7 @@
 
         "lc-events": "Line events. Leave empty to use the last session result.",
 
-        "lc-output": "Export filename for located points.",
+        "lc-output": "Located-points name. Updates from the points file (crashes.csv → crashes_located.csv).",
 
         "lc-unmatched": "Second export for points not on any segment (QC list).",
 
@@ -150,9 +150,11 @@
 
         "dp-events": "Event table. Leave empty to use the last session result.",
 
-        "dp-fmt": "GeoJSON for most uses; shapefile zip when line geometry exists.",
+        "dp-fmt": "GeoJSON is always WGS 84. Shapefile zip can be WGS 84 or the source CRS.",
 
-        "dp-output": "Export filename for clipped geometry.",
+        "dp-crs": "WGS 84 is the general lon/lat system for ArcGIS Pro anywhere. Keep source CRS to match the original route shapefile (UTM, State Plane, …).",
+
+        "dp-output": "Export name. Updates from the events file, or the routes file if events are empty.",
 
       },
 
@@ -188,7 +190,9 @@
 
         "cl-emp": "Existing end measure, if present. Otherwise LRS_EMP is line length.",
 
-        "cl-output": "Export filename for the calibrated routes.",
+        "cl-output": "Export name. Updates from the route file (routes.zip → routes_lrs.geojson).",
+
+        "cl-crs": "Same as Display: WGS 84 for a general lon/lat shapefile, or keep the source CRS.",
 
       },
 
@@ -268,6 +272,7 @@
     "ds-contig": "When checked, rows merge only if the current begin milepost meets the previous end milepost. Uncheck to also merge across gaps when the group columns match.",
     "roadway-pad": "Shown under each Route ID / BMP / EMP row. One setting for the whole tool: it matches IDs across files and rewrites the Route ID column (100 → 00000100). Numeric IDs only leaves I-95 or 008._P alone. Off keeps every ID as written. All IDs pads text too. Export the result to save the padded table. Use Off for already-formatted keys.",
     "cl-calibrate": "Builds a temporary LRS on the route geometry: LRS_UID when IDs are missing, LRS_BMP/LRS_EMP from line length, and vertex M. Prefer agency measures when they exist. After you run it, Display can reuse the session routes.",
+    "export-crs": "WGS 84 (lon/lat) is the general reference system. Use it when the file should open in ArcGIS Pro in any state without assigning a projection.\n\nKeep source CRS writes the original .prj (Florida UTM 17N, Georgia State Plane, …) and leaves coordinates in those units. Use that when you need the export to sit on the same LRS layer you started with.\n\nGeoJSON is always WGS 84. Other states work when the route zip includes its .prj — the tool reads UTM (any zone) and State Plane (Transverse Mercator or Lambert). It does not guess Florida when the .prj says otherwise.",
     "field-profile": "Auto-detect reads common names from this file (ROADWAY, RTE_ID, ROUTE_ID, BEG_MP, FROM_MEASURE, …). Pick a regional layout to fill the dropdowns when those columns exist. You can still change any dropdown by hand.",
   };
 

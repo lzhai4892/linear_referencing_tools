@@ -125,6 +125,11 @@
     };
   }
 
+  function encodeUtf8(text) {
+    if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(String(text));
+    return new Uint8Array(Buffer.from(String(text), "utf8"));
+  }
+
   function decode(bytes, encoding) {
     if (typeof TextDecoder !== "undefined") return new TextDecoder(encoding || "utf-8").decode(bytes);
     return Buffer.from(bytes).toString(encoding || "utf8");
@@ -530,6 +535,10 @@
 
   function writeShp(rows) {
     const records = [];
+    let fileMinX = Infinity;
+    let fileMinY = Infinity;
+    let fileMaxX = -Infinity;
+    let fileMaxY = -Infinity;
     for (const row of rows) {
       const partsCoords = collectLineCoords(row.geometry);
       const parts = [];
@@ -554,6 +563,10 @@
         maxX = Math.max(maxX, x);
         maxY = Math.max(maxY, y);
       }
+      fileMinX = Math.min(fileMinX, minX);
+      fileMinY = Math.min(fileMinY, minY);
+      fileMaxX = Math.max(fileMaxX, maxX);
+      fileMaxY = Math.max(fileMaxY, maxY);
       const content = new ArrayBuffer(44 + parts.length * 4 + points.length * 16);
       const view = new DataView(content);
       view.setInt32(0, 3, true);
@@ -590,6 +603,10 @@
       offsetWords += rec.length / 2;
     });
 
+    const bbox = Number.isFinite(fileMinX)
+      ? { minX: fileMinX, minY: fileMinY, maxX: fileMaxX, maxY: fileMaxY }
+      : null;
+
     function header(fileLengthWords) {
       const buf = new Uint8Array(100);
       const view = new DataView(buf.buffer);
@@ -597,6 +614,12 @@
       view.setInt32(24, fileLengthWords, false);
       view.setInt32(28, 1000, true);
       view.setInt32(32, 3, true);
+      if (bbox) {
+        view.setFloat64(36, bbox.minX, true);
+        view.setFloat64(44, bbox.minY, true);
+        view.setFloat64(52, bbox.maxX, true);
+        view.setFloat64(60, bbox.maxY, true);
+      }
       return buf;
     }
     const shpBody = concat(recBuffers);
@@ -606,7 +629,7 @@
     return { shp, shx };
   }
 
-  function shapefileZip(rows, baseName) {
+  function shapefileZip(rows, baseName, options = {}) {
     if (typeof LRS.rowsHaveLineGeometry === "function" && !LRS.rowsHaveLineGeometry(rows)) {
       throw new Error(
         "Shapefile export needs line geometry. Use CSV or GeoJSON for attribute-only tables, or run Display on a route layer first."
@@ -629,11 +652,16 @@
     const { shp, shx } = writeShp(mapped);
     const dbf = writeDbf(mapped, fieldNames);
     const stem = baseName.replace(/\.(zip|shp)$/i, "") || "lrs_export";
-    return zipStore([
+    const crs = options.crs || (typeof LRS.detectCrs === "function" ? LRS.detectCrs(options.prj, rows) : null);
+    const prjText = typeof LRS.prjWkt === "function" ? LRS.prjWkt(options.prj, crs) : String(options.prj || "").trim();
+    const files = [
       { name: `${stem}.shp`, data: shp },
       { name: `${stem}.shx`, data: shx },
       { name: `${stem}.dbf`, data: dbf },
-    ]);
+    ];
+    if (prjText) files.push({ name: `${stem}.prj`, data: encodeUtf8(prjText) });
+    files.push({ name: `${stem}.cpg`, data: encodeUtf8("UTF-8") });
+    return zipStore(files);
   }
 
   function extensionOf(name) {

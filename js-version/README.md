@@ -31,7 +31,7 @@ Then open `http://127.0.0.1:8765/`.
 - **Create LRS** — fill missing route IDs, 0–length mileposts, and vertex M from drawn length. Temporary LRS, not a published milepost system.
 - **Extract / combine** — unpack packed approach fields (`id = milepost|…`) into one row per approach, then combine them back.
 
-Each step can reuse the last session result so you do not reload the file. The run log is timestamped to the second. The review table shows a sample; click a row with geometry to zoom the map.
+Each step can reuse the last session result so you do not reload the file. Export names take the input file as a prefix (`roads.xlsx` → `roads_overlay.csv`). The run log lists each click as a heading, with auto steps underneath and a finish time at the end. The review table shows a sample; click a row with geometry to zoom the map.
 
 Skip Extract when the table already has Route ID / BMP / EMP. Use it when a packed approach field is all you have (for example LPI files). Combine only after Extract.
 
@@ -61,7 +61,8 @@ MapLibre draws routes and events after Display, Create LRS, or a file with line 
 
 - **Event tables:** CSV, Excel (`.xlsx`), GeoJSON, or a zipped shapefile (`.shp` + `.dbf` / `.prj` / `.shx` in one zip, or those sidecars selected together).
 - **Route / Display source:** GeoJSON or zipped shapefile with line geometry.
-- **Shapefile download:** after Display (or Combine of displayed geometry). Overlay, dissolve, and locate write attributes only unless Display has already attached lines.
+- **Shapefile download:** after Display (or Combine of displayed geometry). The zip includes `.shp`, `.shx`, `.dbf`, and `.prj`. **Spatial reference** defaults to WGS 84 (lon/lat); choose **Keep source CRS** to keep the original UTM or State Plane. GeoJSON is always WGS 84. Overlay, dissolve, and locate write attributes only unless Display has already attached lines.
+- **Other states:** load the route shapefile with its `.prj`. The map and WGS 84 export read UTM (any zone) and State Plane (Transverse Mercator or Lambert) from that file. Without a `.prj`, lon/lat is treated as WGS 84; other projections cannot be converted safely.
 
 ## Tests
 

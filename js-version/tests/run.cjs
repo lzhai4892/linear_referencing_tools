@@ -395,6 +395,35 @@ test("utm zone 17 origin is -81, 0", () => {
   assert.ok(Math.abs(lat) < 0.001);
 });
 
+test("utm zone 18 and state plane come from prj not Florida guess", () => {
+  assert.strictEqual(LRS.detectCrs('PROJCS["NAD_1983_UTM_Zone_18N"]'), "EPSG:26918");
+  const nyFeet = [
+    { geometry: { type: "LineString", coordinates: [[1000000, 200000], [1000100, 200100]] } },
+  ];
+  const guessed = LRS.parseProjection(null, null, nyFeet);
+  assert.strictEqual(guessed.convertible, false);
+  const flEast = LRS.parseProjection(LRS.prjWkt(null, "EPSG:2236"));
+  assert.strictEqual(flEast.kind, "tmerc");
+  const [lon, lat] = LRS.projectCoordinate(656166.6666666665, 0, flEast);
+  assert.ok(Math.abs(lon + 81) < 0.001);
+  assert.ok(Math.abs(lat - 24.33333333333333) < 0.001);
+  const ga =
+    'PROJCS["NAD_1983_StatePlane_Georgia_West_FIPS_1002_Feet",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic"],PARAMETER["False_Easting",2296583.333333333],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",-84.16666666666667],PARAMETER["Standard_Parallel_1",31.88333333333333],PARAMETER["Standard_Parallel_2",33.88333333333333],PARAMETER["Latitude_Of_Origin",30.0],UNIT["Foot_US",0.3048006096012192]]';
+  const gaDef = LRS.parseProjection(ga);
+  assert.strictEqual(gaDef.kind, "lcc");
+  const [gaLon, gaLat] = LRS.projectCoordinate(2296583.333333333, 0, gaDef);
+  assert.ok(Math.abs(gaLon + 84.16666666666667) < 0.02);
+  assert.ok(Math.abs(gaLat - 30) < 0.02);
+  const converted = LRS.rowsToWgs84(
+    [{ ROADWAY: "1", geometry: { type: "LineString", coordinates: [[500000, 3100000], [500200, 3100200]] } }],
+    { crs: "EPSG:26917" }
+  );
+  assert.strictEqual(converted.crs, "EPSG:4326");
+  assert.ok(converted.converted);
+  assert.ok(converted.rows[0].geometry.coordinates[0][0] < -80);
+  assert.ok(/GCS_WGS_1984/.test(converted.prj));
+});
+
 test("detect UTM 17N from PRJ and project without mutating source", () => {
   const prj = 'PROJCS["NAD_1983_UTM_Zone_17N"]';
   assert.strictEqual(LRS.detectCrs(prj), "EPSG:26917");
@@ -593,6 +622,13 @@ test("shapefile export refuses attribute-only tables", () => {
   assert.ok(threw);
 });
 
+test("prj wkt prefers source wkt and maps known epsg", () => {
+  const wkt = 'PROJCS["NAD_1983_UTM_Zone_17N",GEOGCS["GCS_North_American_1983"]]';
+  assert.strictEqual(LRS.prjWkt(wkt, "EPSG:26917"), wkt);
+  assert.ok(/GCS_WGS_1984/.test(LRS.prjWkt(null, "EPSG:4326")));
+  assert.ok(/UTM_Zone_17N/.test(LRS.prjWkt(null, "EPSG:26917")));
+});
+
 test("overlay report flags unmatched roadways", () => {
   const target = [
     { ROADWAY: "100", BEGIN_POST: 0, END_POST: 10 },
@@ -750,8 +786,37 @@ test("csv round trip", () => {
   assert.strictEqual(parsed.rows.length, 1);
   assert.strictEqual(String(parsed.rows[0].ROADWAY), "00000100");
   assert.ok(Math.abs(LRS.geomLength(parsed.rows[0].geometry) - 10) < 1e-6);
+  assert.ok(files["routes.prj"], "shapefile zip must include a .prj");
+  assert.ok(/GCS_WGS_1984/.test(new TextDecoder().decode(files["routes.prj"])));
+  const shpView = new DataView(files["routes.shp"].buffer, files["routes.shp"].byteOffset, files["routes.shp"].byteLength);
+  assert.ok(Math.abs(shpView.getFloat64(36, true) - 0) < 1e-9);
+  assert.ok(Math.abs(shpView.getFloat64(52, true) - 10) < 1e-9);
   passed += 1;
   console.log("ok  shapefile zip round trip");
+
+  const utmPrj =
+    'PROJCS["NAD_1983_UTM_Zone_17N",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",-81.0],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]';
+  const utmZip = LRS.shapefileZip(
+    [
+      {
+        ROADWAY: "1",
+        geometry: { type: "LineString", coordinates: [[500000, 3000000], [501000, 3001000]] },
+      },
+    ],
+    "display.zip",
+    { prj: utmPrj }
+  );
+  const utmFiles = await LRS.parseZip(utmZip);
+  const utmText = new TextDecoder().decode(utmFiles["display.prj"]);
+  assert.ok(utmText.includes("NAD_1983_UTM_Zone_17N"));
+  const utmParsed = LRS.parseShapefile({
+    shp: utmFiles["display.shp"],
+    dbf: utmFiles["display.dbf"],
+    prj: utmFiles["display.prj"],
+  });
+  assert.ok(/UTM.?Zone.?17/i.test(utmParsed.crs));
+  passed += 1;
+  console.log("ok  shapefile zip keeps source prj");
 
   const fromZip = await LRS.tableFromNamedBuffers({ "routes.zip": zip });
   assert.strictEqual(fromZip.rows.length, 1);

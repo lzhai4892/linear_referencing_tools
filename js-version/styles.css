@@ -35,11 +35,13 @@ html, body {
 }
 
 body {
-  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.45;
   font-size: 14px;
+  font-weight: 400;
+  text-rendering: optimizeLegibility;
   color-scheme: light;
 }
 
@@ -1019,32 +1021,40 @@ label[data-hint] {
   font-size: 12px;
 }
 
-.log li {
-  padding: 6px 0;
+.log > li {
+  padding: 8px 0;
   border-bottom: 1px solid var(--line);
 }
 
-.log li:last-child { border-bottom: 0; }
-.log .log-sep {
-  padding: 4px 0;
-  border-bottom: 0;
-  color: var(--line-strong);
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-}
-.log .ok { color: var(--ok); }
-.log .warn { color: var(--warn); }
-.log .err { color: var(--err); }
+.log > li:last-child { border-bottom: 0; }
 
-.log .log-time {
-  display: inline-block;
-  margin-right: 6px;
+.log-run-head {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.log-run-steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--line);
+}
+
+.log-run-steps li {
+  padding: 2px 0 2px 8px;
+  border: 0;
+}
+
+.log-run-end {
+  margin-top: 4px;
   color: var(--faint);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
+
+.log .ok { color: var(--ok); }
+.log .warn { color: var(--warn); }
+.log .err { color: var(--err); }
 
 .log .sample {
   display: block;
